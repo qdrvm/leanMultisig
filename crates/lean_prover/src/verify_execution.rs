@@ -11,6 +11,17 @@ pub struct ProofVerificationDetails {
     pub bytecode_evaluation: Evaluation<EF>,
 }
 
+impl ProofVerificationDetails {
+    pub fn fake() -> Self {
+        Self {
+            bytecode_evaluation: Evaluation {
+                point: Default::default(),
+                value: Default::default(),
+            },
+        }
+    }
+}
+
 pub fn verify_execution(
     bytecode: &Bytecode,
     public_input: &[F],

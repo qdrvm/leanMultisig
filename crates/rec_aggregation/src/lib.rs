@@ -18,6 +18,7 @@ pub use crate::compilation::{get_aggregation_bytecode, init_aggregation_bytecode
 
 pub mod benchmark;
 mod compilation;
+mod fake_multisig;
 pub mod signatures_cache;
 
 const MERKLE_LEVELS_PER_CHUNK_FOR_SLOT: usize = 4;
@@ -152,15 +153,34 @@ pub struct AggregatedXMSS {
     // benchmark / debug purpose
     #[serde(skip, default)]
     pub metadata: Option<ExecutionMetadata>,
+    #[serde(skip, default)]
+    pub fake_encoded: Option<fake_multisig::Encoded>,
 }
 
 impl AggregatedXMSS {
+    fn fake(fake_encoded: fake_multisig::Encoded) -> Self {
+        Self {
+            proof: Proof::fake(),
+            bytecode_point: None,
+            metadata: None,
+            fake_encoded: Some(fake_encoded),
+        }
+    }
+
     pub fn serialize(&self) -> Vec<u8> {
+        if let Some(fake_encoded) = &self.fake_encoded {
+            return fake_encoded.clone();
+        }
+
         let encoded = postcard::to_allocvec(self).expect("postcard serialization failed");
         lz4_flex::compress_prepend_size(&encoded)
     }
 
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
+        if fake_multisig::Config::get().is_some() {
+            return Some(Self::fake(bytes.to_vec()));
+        }
+
         let decompressed = lz4_flex::decompress_size_prepended(bytes).ok()?;
         postcard::from_bytes(&decompressed).ok()
     }
@@ -213,6 +233,11 @@ pub fn xmss_verify_aggregation(
     message: &[u8; MESSAGE_LENGTH],
     slot: u32,
 ) -> Result<ProofVerificationDetails, ProofError> {
+    if let Some(fake_config) = fake_multisig::Config::get() {
+        fake_config.verify();
+        return Ok(ProofVerificationDetails::fake());
+    }
+
     let mut pub_keys = pub_keys;
     pub_keys.sort();
 
@@ -230,6 +255,10 @@ pub fn xmss_aggregate(
     slot: u32,
     log_inv_rate: usize,
 ) -> (Vec<XmssPublicKey>, AggregatedXMSS) {
+    if let Some(fake_config) = fake_multisig::Config::get() {
+        return fake_config.aggregate(children, raw_xmss, message, slot, log_inv_rate);
+    }
+
     raw_xmss.sort_by(|(a, _), (b, _)| a.cmp(b));
     raw_xmss.dedup_by(|(a, _), (b, _)| a == b);
 
@@ -480,6 +509,7 @@ pub fn xmss_aggregate(
             proof: execution_proof.proof,
             bytecode_point,
             metadata: Some(execution_proof.metadata),
+            fake_encoded: None,
         },
     )
 }

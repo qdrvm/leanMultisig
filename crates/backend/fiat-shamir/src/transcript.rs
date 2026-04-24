@@ -36,6 +36,13 @@ pub struct Proof<F> {
 }
 
 impl<F: Field> Proof<F> {
+    pub fn fake() -> Self {
+        Self {
+            transcript: vec![],
+            merkle_paths: vec![],
+        }
+    }
+
     pub fn proof_size_fe(&self) -> usize {
         let merkle_size: usize = self
             .merkle_paths
